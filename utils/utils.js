@@ -158,7 +158,19 @@ const utils = {
 		} else {
 			return result.withYear;
 		}
-	}
+	},
+
+	airBackgroundColor: (aqi) => {
+		if (aqi < 50) {
+			return '#00cf9a'
+		} else if (aqi < 100) {
+			return '#00cf9a'
+		} else if (aqi < 200) {
+			return '#4295f4'
+		} else if (aqi > 300) {
+			return '#ff6600'
+		}
+	},
 };
 
 export default utils;

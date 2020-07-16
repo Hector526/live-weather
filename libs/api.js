@@ -1,24 +1,44 @@
-const QQ_MAP_KEY = 'NQSBZ-QFT3G-OHPQU-INYXB-SIYY5-UPFLX'
-
 /**
- *  逆经纬度查询
+ * 逆经纬度查询
  * @param {*} lat
  * @param {*} lon
  */
-export async function geocoder(lat, lon) {
-	const [err, res] = await uni.request({
-		url: 'https://apis.map.qq.com/ws/geocoder/v1/',
-		data: {
-			location: `${lat},${lon}`,
-			key: QQ_MAP_KEY,
-			get_poi: 0
-		}
-	});
-	if (err) {
-		console.log(err);
-		return null;
-	} else {
-		
-		return res;
-	}
+export const geocoder = (lat, lon) => {
+  return uniCloud.callFunction({
+    name: 'tencent-geocoder',
+    data: {
+      lat,
+      lon
+    }
+  })
+}
+
+/**
+ * 获取和风天气NOW
+ * @param {*} lat
+ * @param {*} lon
+ */
+export const heweatherNow = (lat, lon) => {
+  return uniCloud.callFunction({
+    name: 'heweather-now',
+    data: {
+      lat,
+      lon
+    }
+  })
+}
+
+/**
+ * 获取和风天气质量
+ * @param {*} lat
+ * @param {*} lon
+ */
+export const heweatherAir = (lat, lon) => {
+  return uniCloud.callFunction({
+    name: 'heweather-air',
+    data: {
+      lat,
+      lon
+    }
+  })
 }

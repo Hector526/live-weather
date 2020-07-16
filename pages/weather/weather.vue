@@ -7,15 +7,47 @@
 					<image :src="iconLocation" mode="aspectFill" />
 					<text>{{ address }}</text>
 				</view>
+				<view v-if="airExist" class="air-quality">
+					<text class="circle" :style="{ backgroundColor: airColor }"></text>
+					<text class="value">{{ air.category }} {{ air.aqi }}</text>
+				</view>
+				<view class="now-weather">
+					<view class="temp">
+						<text>{{ nowWeather.temp }}</text>
+						<text class="degree">°</text>
+					</view>
+					<view class="cur-weather">
+						<view class="inline">
+							<image :src="nowWeather.iconNowWeather" mode="aspectFill" />
+							<text>{{ nowWeather.text }}</text>
+						</view>
+						<view class="inline today">
+							<text class="item">湿度 {{ nowWeather.humidity }}%</text>
+							<text class="item">{{ nowWeather.windDir }} {{ nowWeather.windScale }}级</text>
+						</view>
+					</view>
+					<!-- 					<view class="tips" wx:if="{{tips}}">
+						<text>{{ tips }}</text>
+					</view> -->
+				</view>
 			</view>
 			<view class="two-days"><!--今明两天天气--></view>
+		</view>
+		<view class="weather" :style="{ backgroundColor: backgroundColor }">
+			<view class="container"><!--24 小时天气--></view>
+			<view class="container">
+				<view class="week"><!--七天天气--></view>
+			</view>
+			<view class="container">
+				<view class="life-style"><!--生活指数--></view>
+			</view>
 		</view>
 	</view>
 </template>
 
 <script>
 import utils from '@/utils/utils';
-import { geocoder } from '@/libs/api';
+import { geocoder, heweatherNow, heweatherAir } from '@/libs/api';
 
 export default {
 	data() {
@@ -32,7 +64,28 @@ export default {
 			county: '',
 			city: '苏州',
 			latitude: 40.056974,
-			longitude: 116.307689
+			longitude: 116.307689,
+			current: {
+				temp: '0',
+				weather: '数据获取中',
+				humidity: '1',
+				icon: 'xiaolian'
+			},
+
+			nowWeather: {},
+			airExist: false,
+			airColor: '#00cf9a',
+			air: {},
+			today: {
+				temp: 'N/A',
+				weather: '暂无'
+			},
+			tomorrow: {
+				temp: 'N/A',
+				weather: '暂无'
+			},
+			hourlyData: [],
+			weeklyData: []
 		};
 	},
 	onLoad() {
@@ -40,8 +93,9 @@ export default {
 		this.setSystemInfo();
 		this.checkLocationInfo();
 	},
-	onReady() {
-		this.getLocation();
+	async onReady() {
+		await this.getLocation();
+		await this.updateHeweather();
 	},
 	methods: {
 		async setSystemInfo() {
@@ -82,14 +136,16 @@ export default {
 			utils.showLoading('定位中');
 
 			const res = await geocoder(latitude, longitude);
-			if (!res) {
+			if (!res.success) {
 				utils.hideLoading();
 				return;
 			}
 
-			let result = (res.data || {}).result;
+			const resData = res.result.res;
 
-			if (res.statusCode === 200 && result && result.address) {
+			let result = (resData.data || {}).result;
+
+			if (resData.statusCode === 200 && result && result.address) {
 				let { address, formatted_addresses, address_component } = result;
 				if (formatted_addresses && (formatted_addresses.recommend || formatted_addresses.rough)) {
 					address = formatted_addresses.recommend || formatted_addresses.rough;
@@ -115,12 +171,57 @@ export default {
 			} else {
 				this.initLocation(res);
 			}
+		},
+		async updateHeweather() {
+			await this.getHeweatherNow();
+			await this.getHeweatherAir();
+		},
+		async getHeweatherNow() {
+			const res = await heweatherNow(this.latitude, this.longitude);
+			console.log('getHeweatherNow:');
+			console.log(res);
+			this.nowWeather = res.result.data.now;
+			this.nowWeather.iconNowWeather = '/static/weather/' + this.nowWeather.icon + '.png';
+		},
+		async getHeweatherAir() {
+			const res = await heweatherAir(this.latitude, this.longitude);
+			console.log('getHeweatherAir:');
+			console.log(res);
+			if (res.result.data.code == '200') {
+				this.airExist = true;
+			} else {
+				this.airExist = false;
+			}
+			this.air = res.result.data.now;
+			this.airColor = utils.airBackgroundColor(this.air.aqi);
 		}
 	}
 };
 </script>
 
 <style scoped lang="scss">
+@mixin flex-row {
+	display: flex;
+	flex-direction: row;
+}
+
+@mixin flex-column {
+	display: flex;
+	flex-direction: column;
+}
+
+.flex-row {
+	@include flex-row;
+}
+
+.flex-column {
+	@include flex-column;
+}
+
+.block {
+	display: block;
+}
+
 $grid-margin: 20rpx;
 
 .wrapper {
@@ -154,6 +255,97 @@ $grid-margin: 20rpx;
 			height: 24rpx;
 			font-size: 26rpx;
 			margin-right: 4rpx;
+		}
+	}
+
+	.air-quality {
+		position: absolute;
+		top: auto;
+		left: 20rpx;
+		height: 28rpx;
+		line-height: 28rpx;
+		padding: 16rpx 20rpx;
+		border-radius: 8rpx;
+		color: #fff;
+		background: rgba(0, 0, 0, 0.1);
+		font-size: 24rpx;
+
+		.circle {
+			content: '';
+			display: inline-block;
+			width: 8rpx;
+			height: 28rpx;
+			margin-right: 14rpx;
+			vertical-align: middle;
+			border-radius: 4rpx;
+		}
+		.value {
+			vertical-align: middle;
+		}
+	}
+	.now-weather {
+		position: absolute;
+		top: 60%;
+		left: 0;
+		width: 100%;
+		text-align: center;
+		transform: translateY(-50%);
+		line-height: 1;
+	}
+	.temp {
+		margin-bottom: 10rpx;
+	}
+	.temp text {
+		color: #fff;
+		font-weight: lighter;
+		font-family: helvetica-ultra-light;
+		font-size: 240rpx;
+		display: inline-block;
+		vertical-align: top;
+	}
+	.temp text.degree {
+		font-size: 80rpx;
+	}
+	.cur-weather {
+		font-size: 40rpx;
+		margin-bottom: 40rpx;
+		line-height: 1;
+		position: relative;
+
+		.inline {
+			margin-bottom: 30rpx;
+			font-size: 48rpx;
+			display: flex;
+			justify-content: center;
+			align-items: center;
+
+			image {
+				height: 64rpx;
+				width: 64rpx;
+			}
+
+			text {
+				margin-left: 24rpx;
+			}
+		}
+
+		.today {
+			@include flex-row;
+			.item {
+				display: block;
+				padding-right: 16rpx;
+				margin: 0 16rpx 0 0;
+				border-right: 2rpx solid rgba(255, 255, 255, 0.4);
+				font-size: 28rpx;
+				flex: 1;
+				text-align: right;
+				&:last-child {
+					text-align: left;
+					border: none;
+					padding: 0;
+					margin: 0;
+				}
+			}
 		}
 	}
 }
