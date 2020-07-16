@@ -1,6 +1,6 @@
 'use strict';
 const HEWEATHER_KEY = 'c7266e3923a84a718c2e560993cc483c';
-const API_URL = 'https://devapi.heweather.net/v7/weather/now';
+const API_URL = 'https://devapi.heweather.net/v7/weather/3d';
 
 exports.main = async (event, context) => {
 	const {lat, lon} = event;
@@ -17,4 +17,3 @@ exports.main = async (event, context) => {
 
 	return await uniCloud.httpclient.request(API_URL, options);
 }
-

@@ -42,3 +42,18 @@ export const heweatherAir = (lat, lon) => {
     }
   })
 }
+
+/**
+ * 获取和风天气质量
+ * @param {*} lat
+ * @param {*} lon
+ */
+export const heweather3d = (lat, lon) => {
+  return uniCloud.callFunction({
+    name: 'heweather-3d',
+    data: {
+      lat,
+      lon
+    }
+  })
+}
