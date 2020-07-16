@@ -26,12 +26,40 @@
 							<text class="item">{{ nowWeather.windDir }} {{ nowWeather.windScale }}级</text>
 						</view>
 					</view>
-					<!-- 					<view class="tips" wx:if="{{tips}}">
-						<text>{{ tips }}</text>
-					</view> -->
+					<view class="tips"><text>私人订制天气</text></view>
 				</view>
 			</view>
-			<view class="two-days"><!--今明两天天气--></view>
+			<view class="two-days">
+				<!--今明两天天气-->
+				<view class="item">
+					<view class="top">
+						<text class="date">今天</text>
+						<text class="temp">{{ today.tempMin }}/{{ today.tempMax }}</text>
+					</view>
+					<view class="bottom">
+						<text class="twotext">{{ today.textDay }}/{{ today.textNight }}</text>
+						<view class="twoicon">
+							<image :src="today.dayIcon" mode="aspectFill"></image>
+							<text>/</text>
+							<image :src="today.nightIcon" mode="aspectFill"></image>
+						</view>
+					</view>
+				</view>
+				<view class="item">
+					<view class="top">
+						<text class="date">明天</text>
+						<text class="temp">{{ tomorrow.tempMin }}/{{ tomorrow.tempMax }}</text>
+					</view>
+					<view class="bottom">
+						<text class="twotext">{{ tomorrow.textDay }}/{{ tomorrow.textNight }}</text>
+						<view class="twoicon">
+							<image :src="tomorrow.dayIcon" mode="aspectFill"></image>
+							<text>/</text>
+							<image :src="tomorrow.nightIcon" mode="aspectFill"></image>
+						</view>
+					</view>
+				</view>
+			</view>
 		</view>
 		<view class="weather" :style="{ backgroundColor: backgroundColor }">
 			<view class="container"><!--24 小时天气--></view>
@@ -47,14 +75,15 @@
 
 <script>
 import utils from '@/utils/utils';
-import { geocoder, heweatherNow, heweatherAir } from '@/libs/api';
+import { geocoder, heweatherNow, heweatherAir, heweather3d } from '@/libs/api';
 
 export default {
 	data() {
 		return {
 			statusBarHeight: 32,
-			backgroundImage: '/static/cloud.jpg',
+			backgroundImage: '../../static/cloud.jpg',
 			backgroundColor: '#62aadc',
+			// backgroundColor: '#000',
 			paddingTop: '',
 			width: 375,
 			scale: 1,
@@ -65,25 +94,12 @@ export default {
 			city: '苏州',
 			latitude: 40.056974,
 			longitude: 116.307689,
-			current: {
-				temp: '0',
-				weather: '数据获取中',
-				humidity: '1',
-				icon: 'xiaolian'
-			},
-
 			nowWeather: {},
 			airExist: false,
 			airColor: '#00cf9a',
 			air: {},
-			today: {
-				temp: 'N/A',
-				weather: '暂无'
-			},
-			tomorrow: {
-				temp: 'N/A',
-				weather: '暂无'
-			},
+			today: {},
+			tomorrow: {},
 			hourlyData: [],
 			weeklyData: []
 		};
@@ -92,12 +108,26 @@ export default {
 		// 设置系统信息
 		this.setSystemInfo();
 		this.checkLocationInfo();
+		this.cacheInit();
 	},
 	async onReady() {
 		await this.getLocation();
 		await this.updateHeweather();
 	},
 	methods: {
+		cacheInit() {
+			const cacheData = uni.getStorageSync('cacheData');
+			
+			this.address = cacheData.address;
+			this.nowWeather = cacheData.nowWeather;
+			this.airExist = cacheData.airExist;
+			this.airColor = cacheData.airColor;
+			this.air = cacheData.air;
+			this.today = cacheData.today;
+			this.tomorrow = cacheData.tomorrow;
+			// this.hourlyData = cacheData.hourlyData;
+			// this.weeklyData = cacheData.weeklyData;
+		},
 		async setSystemInfo() {
 			const [err, res] = await uni.getSystemInfo();
 			if (err) {
@@ -175,6 +205,7 @@ export default {
 		async updateHeweather() {
 			await this.getHeweatherNow();
 			await this.getHeweatherAir();
+			await this.getHeweather3d();
 		},
 		async getHeweatherNow() {
 			const res = await heweatherNow(this.latitude, this.longitude);
@@ -194,7 +225,32 @@ export default {
 			}
 			this.air = res.result.data.now;
 			this.airColor = utils.airBackgroundColor(this.air.aqi);
+		},
+		async getHeweather3d() {
+			const res = await heweather3d(this.latitude, this.longitude);
+			console.log('getHeweather3d:');
+			console.log(res);
+			this.today = res.result.data.daily[0];
+			this.tomorrow = res.result.data.daily[1];
+			this.today.dayIcon = '/static/weather/' + this.today.iconDay + '.png';
+			this.today.nightIcon = '/static/weather/' + this.today.iconNight + '.png';
+			this.tomorrow.dayIcon = '/static/weather/' + this.tomorrow.iconDay + '.png';
+			this.tomorrow.nightIcon = '/static/weather/' + this.tomorrow.iconNight + '.png';
 		}
+	},
+	onHide() {
+		const cacheData = {
+			address: this.address,
+			nowWeather: this.nowWeather,
+			airExist: this.airExist,
+			airColor: this.airColor,
+			air: this.air,
+			today: this.today,
+			tomorrow: this.tomorrow,
+			hourlyData: this.hourlyData,
+			weeklyData: this.weeklyData
+		};
+		uni.setStorageSync('cacheData', cacheData);
 	}
 };
 </script>
@@ -226,7 +282,7 @@ $grid-margin: 20rpx;
 
 .wrapper {
 	width: 100%;
-	height: 742rpx;
+	height: 784rpx;
 }
 
 .container {
@@ -344,6 +400,82 @@ $grid-margin: 20rpx;
 					border: none;
 					padding: 0;
 					margin: 0;
+				}
+			}
+		}
+	}
+}
+
+// 两天天气
+.two-days {
+	@include flex-row;
+	margin-top: 20rpx;
+	$gap: 24rpx;
+	padding: $gap 0; // background: rgba(0, 0, 0, .1);
+	overflow: hidden;
+	width: 100%;
+	.item {
+		display: flex;
+		flex-direction: column;
+		width: 50%;
+		font-size: 28rpx;
+		line-height: 28rpx;
+		padding: 0 40rpx;
+		border-right: 2rpx solid rgba(255, 255, 255, 0.4);
+		&:last-child {
+			border-right: none;
+		}
+		.top {
+			display: flex;
+			flex-direction: row;
+			justify-content: space-between;
+			align-items: center;
+			height: 24rpx;
+			margin-bottom: 26rpx;
+			margin-right: -20rpx;
+
+			.date {
+				display: flex;
+				flex-direction: row;
+				justify-content: flex-start;
+				align-items: center;
+			}
+			.temp {
+				display: flex;
+				flex-direction: row;
+				justify-content: flex-end;
+				align-items: center;
+			}
+		}
+
+		// bottom
+		.bottom {
+			display: flex;
+			flex-direction: row;
+			justify-content: space-between;
+			align-items: center;
+			height: 44rpx;
+			margin-right: -20rpx;
+
+			.twotext {
+				// float: left;
+				display: flex;
+				flex-direction: row;
+				justify-content: flex-start;
+				align-items: center;
+				height: 44rpx;
+				line-height: 44rpx;
+			}
+
+			.twoicon {
+				height: 44rpx;
+				display: flex;
+				flex-direction: row;
+				justify-content: flex-end;
+				align-items: center;
+				image {
+					width: 44rpx;
+					height: 44rpx;
 				}
 			}
 		}
