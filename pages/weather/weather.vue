@@ -62,12 +62,34 @@
 			</view>
 		</view>
 		<view class="weather" :style="{ backgroundColor: backgroundColor }">
-			<view class="container"><!--24 小时天气--></view>
+			<!-- <view class="container"> -->
+				<!--24 小时天气-->
+				<!-- 				<scroll-view scroll-x class="hourly">
+					<view class="scrollX">
+						<view class="item" v-for="(item, index) in hourlyData" :key="index">
+							<text class="time">{{ item.time }}</text>
+							<icon type="{{item.icon}}" class="icon"></icon>
+							<image :src="item.icon"></image>
+							<text class="temp">{{ item.temp }}°</text>
+						</view>
+					</view>
+				</scroll-view> -->
+			<!-- </view> -->
+<!-- 			<view class="container">
+				<view class="week"> -->
+					<!--七天天气-->
+					<!-- </view> -->
+			<!-- </view> -->
 			<view class="container">
-				<view class="week"><!--七天天气--></view>
-			</view>
-			<view class="container">
-				<view class="life-style"><!--生活指数--></view>
+				<view class="life-style">
+					<!--生活指数-->
+					<view class="item" v-for="(item, index) in lifeStyle" :key="index" @click="lifeStyleDetail(item)">
+						<view class="title">
+							{{ item.name }}
+						</view>
+						<view class="content">{{ item.category }}</view>
+					</view>
+				</view>
 			</view>
 		</view>
 	</view>
@@ -75,7 +97,7 @@
 
 <script>
 import utils from '@/utils/utils';
-import { geocoder, heweatherNow, heweatherAir, heweather3d } from '@/libs/api';
+import { geocoder, heweatherNow, heweatherAir, heweather3d, heweather24h, heweather7d, heweatherIndices } from '@/libs/api';
 
 export default {
 	data() {
@@ -102,7 +124,8 @@ export default {
 			today: {},
 			tomorrow: {},
 			hourlyData: [],
-			weeklyData: []
+			weeklyData: [],
+			lifeStyle: []
 		};
 	},
 	onLoad() {
@@ -116,19 +139,6 @@ export default {
 		await this.updateHeweather();
 	},
 	methods: {
-		cacheInit() {
-			const cacheData = uni.getStorageSync('cacheData');
-
-			this.address = cacheData.address;
-			this.nowWeather = cacheData.nowWeather;
-			this.airExist = cacheData.airExist;
-			this.airColor = cacheData.airColor;
-			this.air = cacheData.air;
-			this.today = cacheData.today;
-			this.tomorrow = cacheData.tomorrow;
-			// this.hourlyData = cacheData.hourlyData;
-			// this.weeklyData = cacheData.weeklyData;
-		},
 		async setSystemInfo() {
 			const [err, res] = await uni.getSystemInfo();
 			if (err) {
@@ -143,6 +153,19 @@ export default {
 			if (!res.authSetting['scope.userLocation']) {
 				this.openLocationError();
 			}
+		},
+		cacheInit() {
+			const cacheData = uni.getStorageSync('cacheData');
+
+			this.address = cacheData.address;
+			this.nowWeather = cacheData.nowWeather;
+			this.airExist = cacheData.airExist;
+			this.airColor = cacheData.airColor;
+			this.air = cacheData.air;
+			this.today = cacheData.today;
+			this.tomorrow = cacheData.tomorrow;
+			// this.hourlyData = cacheData.hourlyData;
+			// this.weeklyData = cacheData.weeklyData;
 		},
 		async getLocation() {
 			const [err, res] = await uni.getLocation({ type: 'gcj02' });
@@ -207,6 +230,9 @@ export default {
 			await this.getHeweatherNow();
 			await this.getHeweatherAir();
 			await this.getHeweather3d();
+			await this.getHeweather24h();
+			await this.getHeweather7d();
+			await this.getHeweatherIndices();
 		},
 		async getHeweatherNow() {
 			const res = await heweatherNow(this.latitude, this.longitude);
@@ -237,7 +263,58 @@ export default {
 			this.today.nightIcon = '/static/weather/' + this.today.iconNight + '.png';
 			this.tomorrow.dayIcon = '/static/weather/' + this.tomorrow.iconDay + '.png';
 			this.tomorrow.nightIcon = '/static/weather/' + this.tomorrow.iconNight + '.png';
-		}
+		},
+		async getHeweather24h() {
+			const res = await heweather24h(this.latitude, this.longitude);
+			console.log('getHeweather24h:');
+			console.log(res);
+		},
+		async getHeweather7d() {
+			const res = await heweather7d(this.latitude, this.longitude);
+			console.log('getHeweather7d:');
+			console.log(res);
+		},
+		async getHeweatherIndices() {
+			const res = await heweatherIndices(this.latitude, this.longitude);
+			console.log('getHeweatherIndices:');
+			console.log(res);
+			this.lifeStyle = this.lifeStyleFormat(res.result.data.daily);
+		},
+		lifeStyleFormat(daily) {
+			let result = [];
+			daily.forEach(item => {
+				switch (item.type) {
+					case '3':
+						result[1] = item;
+						break;
+					case '5':
+						result[5] = item;
+						break;
+					case '6':
+						result[4] = item;
+						break;
+					case '8':
+						result[0] = item;
+						break;
+					case '9':
+						result[2] = item;
+						break;
+					case '1':
+						result[3] = item;
+						break;
+					case '2':
+						result[6] = item;
+						break;
+					case '4':
+						result[7] = item;
+						break;
+					default:
+						break;
+				}
+			});
+			return result;
+		},
+		lifeStyleDetail(e) {}
 	},
 	onHide() {
 		const cacheData = {
@@ -283,7 +360,7 @@ $grid-margin: 20rpx;
 
 .wrapper {
 	width: 100%;
-	height: 784rpx;
+	height: 786rpx;
 }
 
 .container {
@@ -410,7 +487,7 @@ $grid-margin: 20rpx;
 // 两天天气
 .two-days {
 	@include flex-row;
-	margin-top: 20rpx;
+	// margin-top: 20rpx;
 	$gap: 24rpx;
 	padding: $gap 0; // background: rgba(0, 0, 0, .1);
 	overflow: hidden;
@@ -481,5 +558,38 @@ $grid-margin: 20rpx;
 			}
 		}
 	}
+}
+
+// 生活指数
+.life-style {
+  @include flex-row; // border-top: 2rpx solid #e6e6e6;
+  flex-wrap: wrap;
+
+  .item {
+    float: left;
+    text-align: center;
+    width: 25%;
+    height: 188rpx;
+    border-right: 2rpx solid rgba(255, 255, 255, .1);
+    border-bottom: 2rpx solid rgba(255, 255, 255, .1);
+    box-sizing: border-box;
+    padding: 50rpx 0 0;
+  }
+  .content {
+    font-size: 36rpx;
+    margin-top: 20rpx;
+  }
+  .title {
+    // icon {
+    //   font-size: 24rpx;
+    //   margin-right: 10rpx;
+    //   margin-top: -2rpx;
+    // }
+    color: #fff;
+    opacity: 0.7;
+    font-size: 24rpx;
+    height: 24rpx;
+    line-height: 24rpx;
+  }
 }
 </style>
