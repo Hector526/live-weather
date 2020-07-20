@@ -1,6 +1,7 @@
 <template>
 	<view class="wrapper" :style="{ background: 'url(' + backgroundImage + ') center -178rpx / 100% no-repeat ' + backgroundColor }">
 		<view class="container" id="canvas-wrapper" :style="{ paddingTop: paddingTop + 'px' }">
+			<canvas canvas-id="effect" id="effect"></canvas>
 			<view class="now">
 				<!--当前实时天气和空气质量-->
 				<view class="location" @click="chooseLocation">
@@ -34,7 +35,7 @@
 				<view class="item">
 					<view class="top">
 						<text class="date">今天</text>
-						<text class="temp">{{ today.tempMin }}/{{ today.tempMax }}</text>
+						<text class="temp">{{ today.tempMax }}/{{ today.tempMin }}</text>
 					</view>
 					<view class="bottom">
 						<text class="twotext">{{ today.textDay }}/{{ today.textNight }}</text>
@@ -48,7 +49,7 @@
 				<view class="item">
 					<view class="top">
 						<text class="date">明天</text>
-						<text class="temp">{{ tomorrow.tempMin }}/{{ tomorrow.tempMax }}</text>
+						<text class="temp">{{ tomorrow.tempMax }}/{{ tomorrow.tempMin }}</text>
 					</view>
 					<view class="bottom">
 						<text class="twotext">{{ tomorrow.textDay }}/{{ tomorrow.textNight }}</text>
@@ -62,31 +63,43 @@
 			</view>
 		</view>
 		<view class="weather" :style="{ backgroundColor: backgroundColor }">
-			<!-- <view class="container"> -->
+			<view class="container">
 				<!--24 小时天气-->
-				<!-- 				<scroll-view scroll-x class="hourly">
+				<scroll-view class="hourly" scroll-x="true">
 					<view class="scrollX">
 						<view class="item" v-for="(item, index) in hourlyData" :key="index">
 							<text class="time">{{ item.time }}</text>
-							<icon type="{{item.icon}}" class="icon"></icon>
-							<image :src="item.icon"></image>
+							<view class="icon"><image :src="item.icon" mode="aspectFill"></image></view>
 							<text class="temp">{{ item.temp }}°</text>
 						</view>
 					</view>
-				</scroll-view> -->
-			<!-- </view> -->
-<!-- 			<view class="container">
-				<view class="week"> -->
+				</scroll-view>
+			</view>
+			<view class="container">
+				<view class="week">
 					<!--七天天气-->
-					<!-- </view> -->
-			<!-- </view> -->
+					<view class="week-weather">
+						<view class="item" v-for="(item, index) in weeklyData" :key="index">
+							<view class="day">{{ item.day }}</view>
+							<view class="date">{{ item.date }}</view>
+							<view class="daytime">
+								<view class="wt">{{ item.textDay }}</view>
+								<image :src="item.dayIcon" mode="aspectFill"></image>
+							</view>
+							<view class="night">
+								<image :src="item.nightIcon" mode="aspectFill"></image>
+								<view class="wt">{{ item.textNight }}</view>
+							</view>
+						</view>
+					</view>
+					<view class="week-chart"><canvas canvas-id="chart" id="chart"></canvas></view>
+				</view>
+			</view>
 			<view class="container">
 				<view class="life-style">
-					<!--生活指数-->
-					<view class="item" v-for="(item, index) in lifeStyle" :key="index" @click="lifeStyleDetail(item)">
-						<view class="title">
-							{{ item.name }}
-						</view>
+					<!--生活指数 -->
+					<view class="item" v-for="(item, index) in lifeStyle" :key="index">
+						<view class="title">{{ item.name }}</view>
 						<view class="content">{{ item.category }}</view>
 					</view>
 				</view>
@@ -97,7 +110,14 @@
 
 <script>
 import utils from '@/utils/utils';
+import { fixChart, getChartConfig, drawEffect } from '@/libs/utils';
+import Chart from '@/libs/chartjs/chart';
 import { geocoder, heweatherNow, heweatherAir, heweather3d, heweather24h, heweather7d, heweatherIndices } from '@/libs/api';
+
+const WEEK_NAME = ['周一', '周二', '周三', '周四', '周五', '周六', '周日', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+let effectInstance;
+const EFFECT_CANVAS_HEIGHT = 768 / 2;
+const CHART_CANVAS_HEIGHT = 272 / 2;
 
 export default {
 	data() {
@@ -125,7 +145,8 @@ export default {
 			tomorrow: {},
 			hourlyData: [],
 			weeklyData: [],
-			lifeStyle: []
+			lifeStyle: [],
+			effect: {}
 		};
 	},
 	onLoad() {
@@ -137,6 +158,7 @@ export default {
 	async onReady() {
 		await this.getLocation();
 		await this.updateHeweather();
+		await this.renderWeekChart();
 	},
 	methods: {
 		async setSystemInfo() {
@@ -164,8 +186,8 @@ export default {
 			this.air = cacheData.air;
 			this.today = cacheData.today;
 			this.tomorrow = cacheData.tomorrow;
-			// this.hourlyData = cacheData.hourlyData;
-			// this.weeklyData = cacheData.weeklyData;
+			this.hourlyData = cacheData.hourlyData;
+			this.weeklyData = cacheData.weeklyData;
 		},
 		async getLocation() {
 			const [err, res] = await uni.getLocation({ type: 'gcj02' });
@@ -236,15 +258,58 @@ export default {
 		},
 		async getHeweatherNow() {
 			const res = await heweatherNow(this.latitude, this.longitude);
-			console.log('getHeweatherNow:');
-			console.log(res);
+			// console.log('getHeweatherNow:');
+			// console.log(res);
 			this.nowWeather = res.result.data.now;
 			this.nowWeather.iconNowWeather = '/static/weather/' + this.nowWeather.icon + '.png';
+			this.effect = this.getEffectSettings(this.nowWeather.icon);
+		},
+		getEffectSettings(code) {
+			code = parseInt(code);
+			let result = false;
+
+			if ((code >= 300 && code <= 304) || code === 309 || code === 313 || code == 399 || code === 406 || code === 404) {
+				result = {
+					name: 'rain',
+					amount: 100
+				};
+			} else if (code === 499 || code === 405) {
+				result = {
+					name: 'snow',
+					amount: 70
+				};
+			} else if (code >= 305 && code <= 312) {
+				let amount = 100 + (code - 305) * 10;
+				result = {
+					name: 'rain',
+					amount: amount
+				};
+			} else if (code >= 314 && code <= 318) {
+				let amount = 100 + (code - 314) * 10;
+				result = {
+					name: 'rain',
+					amount: amount
+				};
+			} else if (code >= 400 && code <= 403) {
+				let amount = 60 + (code - 400) * 10;
+				result = {
+					name: 'snow',
+					amount: amount
+				};
+			} else if (code >= 407 && code <= 410) {
+				let amount = 60 + (code - 407) * 10;
+				result = {
+					name: 'snow',
+					amount: amount
+				};
+			}
+
+			return result;
 		},
 		async getHeweatherAir() {
 			const res = await heweatherAir(this.latitude, this.longitude);
-			console.log('getHeweatherAir:');
-			console.log(res);
+			// console.log('getHeweatherAir:');
+			// console.log(res);
 			if (res.result.data.code == '200') {
 				this.airExist = true;
 			} else {
@@ -255,8 +320,8 @@ export default {
 		},
 		async getHeweather3d() {
 			const res = await heweather3d(this.latitude, this.longitude);
-			console.log('getHeweather3d:');
-			console.log(res);
+			// console.log('getHeweather3d:');
+			// console.log(res);
 			this.today = res.result.data.daily[0];
 			this.tomorrow = res.result.data.daily[1];
 			this.today.dayIcon = '/static/weather/' + this.today.iconDay + '.png';
@@ -266,21 +331,87 @@ export default {
 		},
 		async getHeweather24h() {
 			const res = await heweather24h(this.latitude, this.longitude);
-			console.log('getHeweather24h:');
-			console.log(res);
+			// console.log('getHeweather24h:');
+			// console.log(res);
+			this.hourlyData = this.formatHourlyData(res.result.data.hourly);
+		},
+		formatHourlyData(hourly) {
+			let result = [];
+			hourly.forEach(item => {
+				result.push({
+					temp: item.temp,
+					time: item.fxTime.substring(11, 16),
+					icon: '/static/weather/' + item.icon + '.png'
+				});
+			});
+			return result;
 		},
 		async getHeweather7d() {
 			const res = await heweather7d(this.latitude, this.longitude);
-			console.log('getHeweather7d:');
-			console.log(res);
+			// console.log('getHeweather7d:');
+			// console.log(res);
+			this.weeklyData = this.formatHeweather7d(res.result.data.daily);
+		},
+		formatHeweather7d(daily7d) {
+			let result = [];
+			daily7d.forEach((item, index) => {
+				const weekName = this.formatWeeklyDate(index);
+				const date = this.formatDate(item.fxDate);
+				// const wind = formatWind();
+				result.push({
+					day: weekName,
+					date: date,
+					textDay: item.textDay,
+					textNight: item.textNight,
+					dayIcon: '/static/weather/' + item.iconDay + '.png',
+					nightIcon: '/static/weather/' + item.iconNight + '.png',
+					tempMax: item.tempMax,
+					tempMin: item.tempMin
+				});
+			});
+			return result;
+		},
+		formatWeeklyDate(index) {
+			const now = new Date();
+			const names = ['今天', '明天', '后天'];
+			if (names[index]) {
+				return names[index];
+			}
+			const curWeek = now.getDay() - 1 + index;
+
+			return WEEK_NAME[curWeek];
+		},
+		formatDate(ts) {
+			const month = ts.substring(5, 7);
+			const day = ts.substring(8, 10);
+			return month + '/' + day;
+		},
+		formatWind(code, level) {
+			if (!code) {
+				return '无风';
+			}
+
+			if (level) {
+				level = level.toString().split('-');
+				level = level[level.length - 1];
+				return code + ' ' + level + '级';
+			}
+			return code;
+		},
+		formatWindLevel(level) {
+			if (level === '1-2') {
+				return '微风';
+			} else {
+				return level + '级';
+			}
 		},
 		async getHeweatherIndices() {
 			const res = await heweatherIndices(this.latitude, this.longitude);
-			console.log('getHeweatherIndices:');
-			console.log(res);
-			this.lifeStyle = this.lifeStyleFormat(res.result.data.daily);
+			// console.log('getHeweatherIndices:');
+			// console.log(res);
+			this.lifeStyle = this.formatlifeStyle(res.result.data.daily);
 		},
-		lifeStyleFormat(daily) {
+		formatlifeStyle(daily) {
 			let result = [];
 			daily.forEach(item => {
 				switch (item.type) {
@@ -314,7 +445,49 @@ export default {
 			});
 			return result;
 		},
-		lifeStyleDetail(e) {}
+		async renderWeekChart() {
+			this.stopEffect();
+
+			if (this.effect && this.effect.name) {
+				effectInstance = drawEffect('effect', this.effect.name, this.width, EFFECT_CANVAS_HEIGHT * this.scale, this.effect.amount);
+			}
+			// 延时画图
+			this.drawChart();
+		},
+		stopEffect() {
+			if (effectInstance && effectInstance.clear) {
+				effectInstance.clear();
+			}
+		},
+		drawChart() {
+			const height = CHART_CANVAS_HEIGHT * this.scale;
+			let ctx = uni.createCanvasContext('chart');
+			fixChart(ctx, this.width, height);
+
+			// 添加温度
+			Chart.pluginService.register({
+				afterDatasetsDraw(e, t) {
+					ctx.setTextAlign('center');
+					ctx.setTextBaseline('middle');
+					ctx.setFontSize(16);
+
+					e.data.datasets.forEach((t, a) => {
+						let r = e.getDatasetMeta(a);
+						r.hidden ||
+							r.data.forEach((e, r) => {
+								// 昨天数据发灰
+								ctx.setFillStyle(r === 0 ? '#e0e0e0' : '#ffffff');
+
+								let i = t.data[r].toString() + '\xb0';
+								let o = e.tooltipPosition();
+								0 == a ? ctx.fillText(i, o.x + 2, o.y - 8 - 10) : 1 == a && ctx.fillText(i, o.x + 2, o.y + 8 + 10);
+							});
+					});
+				}
+			});
+
+			return new Chart(ctx, getChartConfig(this.weeklyData));
+		}
 	},
 	onHide() {
 		const cacheData = {
@@ -365,11 +538,19 @@ $grid-margin: 20rpx;
 
 .container {
 	margin-bottom: $grid-margin;
-	max-width: 750rpx;
 	box-sizing: border-box;
 	color: #fff;
-	// color: #e0e0e0;
 }
+
+// 顶图
+#effect {
+	width: 750rpx;
+	height: 768rpx;
+	position: absolute;
+	top: 0;
+	right: 0;
+}
+
 .now {
 	height: 560rpx;
 	overflow: hidden;
@@ -560,36 +741,154 @@ $grid-margin: 20rpx;
 	}
 }
 
+// 详细天气
+.weather {
+	background-color: #62aadc;
+	.container {
+		background: rgba(0, 0, 0, 0.1);
+		overflow: hidden;
+		width: 100%;
+	}
+
+	.container:last-child {
+		margin-bottom: 0;
+		padding-bottom: 20rpx;
+	}
+}
+
+//hourly
+.hourly {
+	height: 180rpx;
+
+	.scrollX {
+		@include flex-row;
+		flex-wrap: nowrap;
+		padding: 30rpx 0 30rpx 0;
+
+		width: 2688rpx;
+	}
+	.item {
+		@include flex-column;
+		width: 112rpx;
+		align-items: center;
+		justify-content: center;
+		overflow: hidden;
+
+		.time {
+			font-size: 28rpx;
+			line-height: 24rpx;
+			height: 28rpx;
+		}
+		.temp {
+			margin-top: 8rpx;
+			font-size: 28rpx;
+			line-height: 24rpx;
+			height: 28rpx;
+		}
+		.icon {
+			@include flex-row;
+			text-align: center;
+			justify-content: center;
+			margin-top: 8rpx;
+			width: 56rpx;
+			height: 56rpx;
+
+			image {
+				width: 56rpx;
+				height: 56rpx;
+			}
+		}
+	}
+}
+
+// week
+.week {
+	position: relative;
+	padding: 40rpx 0;
+	min-height: 200rpx;
+	.week-weather {
+		@include flex-row;
+		text-align: center;
+		.item:first-child {
+			color: #e0e0e0;
+		}
+		.item {
+			flex: 1;
+			.day,
+			.date,
+			.wind {
+				color: #efefef;
+			}
+			.wind {
+				font-size: 24rpx;
+				line-height: 24rpx;
+				height: 24rpx;
+				width: 80rpx;
+				margin: 0 auto 12rpx;
+				overflow: hidden;
+			}
+			.date {
+				margin: 10rpx 0 30rpx;
+				font-size: 24rpx;
+			}
+			.wt {
+				margin-bottom: 30rpx;
+			}
+			.night {
+				margin-top: 272rpx;
+			}
+			.night .wt {
+				margin: 32rpx 0 30rpx;
+			}
+			image {
+				width: 48rpx;
+				height: 48rpx;
+			}
+		}
+	}
+	.week-chart {
+		position: absolute;
+		left: 0;
+		right: 0;
+		height: 272rpx;
+		top: 280rpx; // background: white;
+	}
+	.week-chart canvas {
+		width: 750rpx;
+		height: 272rpx;
+	}
+}
+
 // 生活指数
 .life-style {
-  @include flex-row; // border-top: 2rpx solid #e6e6e6;
-  flex-wrap: wrap;
+	@include flex-row; // border-top: 2rpx solid #e6e6e6;
+	flex-wrap: wrap;
 
-  .item {
-    float: left;
-    text-align: center;
-    width: 25%;
-    height: 188rpx;
-    border-right: 2rpx solid rgba(255, 255, 255, .1);
-    border-bottom: 2rpx solid rgba(255, 255, 255, .1);
-    box-sizing: border-box;
-    padding: 50rpx 0 0;
-  }
-  .content {
-    font-size: 36rpx;
-    margin-top: 20rpx;
-  }
-  .title {
-    // icon {
-    //   font-size: 24rpx;
-    //   margin-right: 10rpx;
-    //   margin-top: -2rpx;
-    // }
-    color: #fff;
-    opacity: 0.7;
-    font-size: 24rpx;
-    height: 24rpx;
-    line-height: 24rpx;
-  }
+	.item {
+		float: left;
+		text-align: center;
+		width: 25%;
+		height: 188rpx;
+		border-right: 2rpx solid rgba(255, 255, 255, 0.1);
+		border-bottom: 2rpx solid rgba(255, 255, 255, 0.1);
+		box-sizing: border-box;
+		padding: 50rpx 0 0;
+	}
+	.content {
+		font-size: 36rpx;
+		margin-top: 20rpx;
+	}
+	.title {
+		// icon {
+		//   font-size: 24rpx;
+		//   margin-right: 10rpx;
+		//   margin-top: -2rpx;
+		// }
+		color: #fff;
+		opacity: 0.7;
+		font-size: 24rpx;
+		height: 24rpx;
+		line-height: 24rpx;
+	}
 }
 </style>
